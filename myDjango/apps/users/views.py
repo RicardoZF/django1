@@ -12,7 +12,7 @@ from django.views.generic import View
 # def register(request):
 #     # 注册页面
 #     return render(request,'register.html')
-from apps.users.models import User
+from users.models import User
 
 class RegisterView(View):
     # 注册页面
