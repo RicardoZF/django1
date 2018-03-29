@@ -12,6 +12,7 @@ from django.views.generic import View
 
 from celery_tasks.tasks import send_active_email
 from users.models import User
+from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 
 
 # def register(request):
@@ -63,7 +64,6 @@ class RegisterView(View):
         # delay 通知woeker执行
         send_active_email.delay(recipient_list,user.username,token)
 
-        user.is_active = True
         # 保存到数据库
         user.save()
         return HttpResponse('登陆逻辑')
@@ -74,5 +74,22 @@ class ActiveView(View):
 
     def get(self, request, token):
         """处理激活请求"""
-        pass
+        # 解析token 获取用户id数据
+        # 参1 混淆用的盐  参2 过期时间
+        serializer = Serializer(settings.SECRET_KEY, 3600)
+        result = serializer.loads(token)  # {"confirm": self.id}
+        userid = result.get("confirm")
+
+        # 通过userid获取用户,将用户转化为激活状态
+        try:
+            user = User.objects.get(id = userid)
+        except User.DoesNotExist:
+            return HttpResponse('用户不存在')
+
+        if user.is_active:
+            return HttpResponse('用户已激活')
+        user.is_active = True
+        user.save()
+
+        return HttpResponse('激活成功,去主页')
 
