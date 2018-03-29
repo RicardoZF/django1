@@ -1,6 +1,7 @@
 import re
 
 from django.conf import settings
+from django.contrib.auth import authenticate, login
 from django.contrib.sessions.backends import db
 from django.core.mail import send_mail
 from django.core.urlresolvers import reverse
@@ -91,5 +92,47 @@ class ActiveView(View):
         user.is_active = True
         user.save()
 
-        return HttpResponse('激活成功,去主页')
+        return redirect(reverse('users:login'))
 
+
+class LoginView(View):
+    """登陆"""
+    def get(self,request):
+        """响应登陆请求"""
+        return render(request,'login.html')
+
+    def post(self,request):
+        """处理 登陆逻辑"""
+
+        # 获取用户名,密码
+        user_name = request.POST.get('username')
+        pwd = request.POST.get('pwd')
+
+        # 校验参数
+        if not all([user_name,pwd]):
+            print(0000000)
+            return redirect(reverse('users:login'))
+
+        # django用户认证系统判断是否登陆成功
+        user = authenticate(username = user_name,password = pwd)
+
+        # 验证失败
+        if user is None:
+            print(1111111)
+            return render(request,'login.html',{'errormsg':'用户名或密码错误'})
+        # 验证成功,再验证是否激活
+        if not user.is_active:
+            return render(request, 'login.html', {'errormsg': '用户未激活'})
+        # 使用django的用户认证系统，在session中保存用户的登陆状态
+        login(request, user)
+
+        # 判断用户是否勾选'记住用户'
+        #   request.session.set_expiry(value)
+        # value 一个整数，会话将在value秒后过期;为0 浏览器关闭时; 为None，那么会话则两个星期后过期
+
+        if request.POST.get('remembered') != 'on':
+            request.session.set_expiry(0)
+        else:
+            request.session.set_expiry(None)
+        # 登陆成功，重定向到主页
+        return HttpResponse('去主页')
