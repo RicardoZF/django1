@@ -103,6 +103,24 @@ DATABASES = {
 # 配置读写分离
 # DATABASE_ROUTERS = ['utils.db_router.MasterSlaveDBRouter']
 
+# 缓存
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://192.168.44.129:6379/5",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
+
+
+# Session
+# http://django-redis-chs.readthedocs.io/zh_CN/latest/#session-backend
+
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "default"
+
 # 应用.用户模型类
 AUTH_USER_MODEL = 'users.User'
 # Internationalization

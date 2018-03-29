@@ -110,7 +110,6 @@ class LoginView(View):
 
         # 校验参数
         if not all([user_name,pwd]):
-            print(0000000)
             return redirect(reverse('users:login'))
 
         # django用户认证系统判断是否登陆成功
@@ -118,7 +117,6 @@ class LoginView(View):
 
         # 验证失败
         if user is None:
-            print(1111111)
             return render(request,'login.html',{'errormsg':'用户名或密码错误'})
         # 验证成功,再验证是否激活
         if not user.is_active:
