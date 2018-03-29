@@ -1,7 +1,7 @@
 import re
 
 from django.conf import settings
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import authenticate, login,logout
 from django.contrib.sessions.backends import db
 from django.core.mail import send_mail
 from django.core.urlresolvers import reverse
@@ -125,12 +125,22 @@ class LoginView(View):
         login(request, user)
 
         # 判断用户是否勾选'记住用户'
-        #   request.session.set_expiry(value)
-        # value 一个整数，会话将在value秒后过期;为0 浏览器关闭时; 为None，那么会话则两个星期后过期
-
+        # request.session.set_expiry(value)
+        # value 是一个整数，会话将在value秒后过期;为0 浏览器关闭时;
+        # value 为None，那么会话则两个星期后过期
         if request.POST.get('remembered') != 'on':
             request.session.set_expiry(0)
         else:
             request.session.set_expiry(None)
         # 登陆成功，重定向到主页
         return HttpResponse('去主页')
+
+
+class LogoutView(View):
+    """登出"""
+    def get(self,request):
+
+        # 由Django用户认证系统完成：需要清理cookie和session,request参数中有user对象
+        logout(request)
+        # 退出后跳转：由产品经理设计
+        return redirect(reverse('users:login'))
