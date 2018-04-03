@@ -152,3 +152,6 @@ EMAIL_PORT = 25 # 发邮件端口
 EMAIL_HOST_USER = '18226926930@163.com' # 授权的邮箱
 EMAIL_HOST_PASSWORD = 'xiaoxin369' # 邮箱授权时获得的密码，非注册登录密码
 EMAIL_FROM = '18226926930@163.com' # 发件人抬头
+
+# 指定装饰器@login_required验证失败后跳转到的路径
+LOGIN_URL = '/users/login'
