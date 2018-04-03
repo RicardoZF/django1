@@ -11,4 +11,5 @@ urlpatterns = [
     url(r'^logout$',views.LogoutView.as_view(),name='logout'), # 登陆
     # url(r'^address$',login_required(views.AddressView.as_view()) ,name='address'), # 收货地址
     url(r'^address$',views.AddressView.as_view() ,name='address'), # 收货地址
+    url(r'^info$',views.UserInfoView.as_view() ,name='info'), # 用户信息
 ]

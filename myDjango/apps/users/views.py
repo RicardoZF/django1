@@ -205,3 +205,21 @@ class AddressView(LoginRequired, View):
             )
 
         return redirect(reverse('users:address'))
+
+
+class UserInfoView(View):
+    """用户中心"""
+
+    def get(self,request):
+        """查询用户信息和地址信息"""
+
+        user = request.user
+        try:
+            address = user.address_set.latest('create_time')
+        except Address.DoesNotExist:
+            # 地址不存在
+            address = None
+        context = {
+            'adderss': address,
+        }
+        return render(request,'user_center_info.html',context)
