@@ -17,8 +17,8 @@ from celery_tasks.tasks import send_active_email
 from users.models import User, Address
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from utils.views import LoginRequired
-
-
+from django_redis import get_redis_connection
+from goods.models import GoodsSKU
 class RegisterView(View):
     # 注册页面
     def get(self, request):
@@ -214,12 +214,36 @@ class UserInfoView(View):
         """查询用户信息和地址信息"""
 
         user = request.user
+
+        # 获取最新的地址信息
         try:
             address = user.address_set.latest('create_time')
         except Address.DoesNotExist:
             # 地址不存在
             address = None
+
+        # 获取最新的5个浏览记录
+
+        # 存在redis  string 列表 集合 有序集合 hash
+        # 存的是  列表形式  'history_userid':[sku1.id,sku2.id,sku3.id,sku4.id,sku5.id,]
+
+        # 创建redis连接对象
+        redis_conn = get_redis_connection('default')
+
+        # 从redis中取商品浏览列表数据 没有数据,返回的是空列表[]
+        sku_ids = redis_conn.lrange('history_%s'%user.id,0,4)
+        # 从数据库中查询商品sku信息,范围在sku_ids中
+        # sku_list = GoodsSKU.objects.filter(id_in=sku_ids)
+        # 问题：经过数据库查询后得到的skuList，就不再是redis中维护的顺序了,而是[2,5,8]
+        # 需求：保证经过数据库查询后，依然是[8,2,5]
+        # 循环遍历,加入列表
+        skus = []
+        for sku_id in sku_ids:
+            sku = GoodsSKU.objects.get(id=sku_id)
+            skus.append(sku)
+
         context = {
             'adderss': address,
+            'skus':skus
         }
         return render(request,'user_center_info.html',context)
