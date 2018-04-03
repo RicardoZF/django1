@@ -14,7 +14,7 @@ from django.utils.decorators import classonlymethod
 from django.views.generic import View
 
 from celery_tasks.tasks import send_active_email
-from users.models import User
+from users.models import User, Address
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from utils.views import LoginRequired
 
@@ -149,7 +149,7 @@ class LogoutView(View):
         return redirect(reverse('users:login'))
 
 
-class AddressView(LoginRequired,View):
+class AddressView(LoginRequired, View):
     """用户地址"""
 
     def get(self, request):
@@ -158,9 +158,50 @@ class AddressView(LoginRequired,View):
         # if not request.user.is_authenticated():
         #     return redirect(reverse('users:login'))
 
-        return render(request, 'user_center_site.html')
+        user = request.user
+        # 获取最新的地址
+        # address = user.address_set.order_by('-create_time')[0]
+        try:
+            address = user.address_set.latest('create_time')
+        except Address.DoesNotExist:
+            # 地址不存在
+            address = None
+        context = {
+            # 'user':user,  # 不用传,request中有
+            'adderss': address,
+        }
+        return render(request, 'user_center_site.html', context)
 
-    # @classonlymethod
-    # def as_view(cls, **initkwargs):
-    #     view = super().as_view
-    #     return login_required(view)
+    def post(self, request):
+        """修改用户地址"""
+
+        # 接收地址表单数据
+        user = request.user
+
+        recv_name = request.POST.get('receiver_name')  # 收件人
+        recv_mobile = request.POST.get('receiver_mobile')  # 联系电话
+        addr = request.POST.get('detail_addr')  # 详细地址
+        zip_code = request.POST.get('zip_code')  # 邮政编码
+
+        # 校验参数
+        if all([recv_name,recv_mobile,addr,zip_code]):
+
+            # address = Address(
+            #     user=user,
+            #     receiver_name=recv_name,
+            #     detail_addr=addr,
+            #     zip_code=zip_code,
+            #     receiver_mobile=recv_mobile
+            # )
+            # address.save()
+
+            # 保存到数据库
+            Address.objects.create(
+                user=user,
+                receiver_name=recv_name,
+                detail_addr=addr,
+                zip_code=zip_code,
+                receiver_mobile=recv_mobile
+            )
+
+        return redirect(reverse('users:address'))
