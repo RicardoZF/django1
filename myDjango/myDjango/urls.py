@@ -20,4 +20,6 @@ urlpatterns = [
     url(r'^admin/', include(admin.site.urls)),
     # 用户模块
     url(r'^users/', include('apps.users.urls',namespace='users')),
+    # 富文本
+    url(r'^tinymce/', include('tinymce.urls')),
 ]

@@ -44,6 +44,8 @@ INSTALLED_APPS = (
     'goods',
     'orders',
     'cart',
+    # 富文本编辑器
+    'tinymce',
 )
 
 MIDDLEWARE_CLASSES = (
@@ -157,4 +159,11 @@ DEFAULT_FILE_STORAGE = 'utils.fastdfs.storage.FastDFSStorage'
 
 # FastFDS使用的配置信息
 CLIENT_CONF = os.path.join(BASE_DIR, 'utils/fastdfs/client.conf')
-SERVER_IP = 'http://192.168.243.193:8888/'
+SERVER_IP = 'http://192.168.44.129:8888/'
+
+# 富文本编辑器配置
+TINYMCE_DEFAULT_CONFIG = {
+  'theme': 'advanced', # 丰富样式
+  'width': 600,
+  'height': 400,
+}
