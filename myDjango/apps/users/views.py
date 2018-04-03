@@ -131,8 +131,12 @@ class LoginView(View):
             request.session.set_expiry(0)
         else:
             request.session.set_expiry(None)
-        # 登陆成功，重定向到主页
-        return HttpResponse('去主页')
+        # 登陆成功，根据next决定访问的页面
+        next = request.GET.get('next')
+        if next is None:
+            return HttpResponse('去主页')
+        else:
+            return redirect(next)
 
 
 class LogoutView(View):
