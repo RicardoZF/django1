@@ -1,7 +1,7 @@
 from django.contrib import admin
 from goods.models import GoodsCategory, Goods, GoodsSKU, IndexPromotionBanner, IndexCategoryGoodsBanner
 from celery_tasks.tasks import generate_static_index_html
-
+from django.core.cache import cache
 
 # Register your models here.
 
@@ -14,12 +14,16 @@ class BaseAdmin(admin.ModelAdmin):
         obj.save()
         # 调用celery异步生成静态文件方法
         generate_static_index_html.delay()
+        # 修改了数据库数据就需要删除缓存
+        cache.delete('index_page_data')
 
     def delete_model(self, request, obj):
         """删除对象时执行"""
         obj.delete()
         # 调用celery异步生成静态文件方法
         generate_static_index_html.delay()
+        # 修改了数据库数据就需要删除缓存
+        cache.delete('index_page_data')
 
 
 class IndexPromotionBannerAdmin(BaseAdmin):
