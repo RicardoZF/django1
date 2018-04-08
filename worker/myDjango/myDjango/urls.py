@@ -20,4 +20,10 @@ urlpatterns = [
     url(r'^admin/', include(admin.site.urls)),
     # 用户模块
     url(r'^users/', include('apps.users.urls',namespace='users')),
+    # 商品模块
+    url(r'^goods/', include('apps.goods.urls',namespace='goods')),
+    # 订单模块
+    # url(r'^orders/', include('apps.orders.urls',namespace='orders')),
+    # 富文本
+    url(r'^tinymce/', include('tinymce.urls')),
 ]
