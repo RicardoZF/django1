@@ -1,4 +1,5 @@
 from django.core.cache import cache
+from django.core.paginator import Paginator, InvalidPage
 from django.core.urlresolvers import reverse
 from django.shortcuts import render, redirect
 from django.views.generic import View
@@ -143,8 +144,94 @@ class DetailView(View):
             # 最多保存5个数据
             # LTRIM KEY_NAME START STOP
             # 对一个列表进行修剪，让列表只保留指定区间内的元素，不在指定区间之内的元素都将被删除。
-            redis_conn.ltrim("history_%s"%user_id, 0, 4)
+            redis_conn.ltrim("history_%s" % user_id, 0, 4)
 
         context['cart_num'] = cart_num
 
         return render(request, 'detail.html', context)
+
+
+class ListView(View):
+    """商品列表页"""
+
+    def get(self, request, category_id, page):
+        """
+         /list/category_id/page_num/?sort='默认，价格，人气'
+        参数: category_id page_num
+        需要获取的数据:
+        sort 当前分类 所有分类 当前分类所有sku 购物车 新品推荐
+        """
+        # sort
+        sort = request.GET.get('sort')
+
+        # 当前分类
+        try:
+            category = GoodsCategory.objects.get(id=category_id)
+        except GoodsCategory.DoesNotExist:
+            return redirect(reverse('goods:index'))
+
+        # 查询商品所有类别
+        categorys = GoodsCategory.objects.all()
+
+        # 购物车数量
+        cart_num = 0
+        # 如果是登录的用户
+        if request.user.is_authenticated():
+            # 获取用户id
+            user_id = request.user.id
+            # 从redis中获取购物车信息
+            redis_conn = get_redis_connection("default")
+            # 如果redis中不存在，会返回None
+            cart_dict = redis_conn.hgetall("cart_%s" % user_id)
+            for val in cart_dict.values():
+                cart_num += int(val)
+
+        # 新品推荐
+        new_skus = GoodsSKU.objects.filter(category=category).order_by('-create_time')[:2]
+
+        # 按sort查询商品 'price' 'hot' 'default'
+        if sort == 'price':
+            skus = GoodsSKU.objects.filter(category=category).order_by('price')
+        elif sort == 'hot':
+            skus = GoodsSKU.objects.filter(category=category).order_by('-sales')
+        else:
+            skus = GoodsSKU.objects.filter(category=category)
+            # 无论用户是否传入或者传入其他的排序规则，我在这里都重置成'default'
+            sort = 'default'
+
+        # 分页 参一 所有商品对象 参二 每页的数量
+        paginator = Paginator(skus, 2)
+        # paginator.num_pages 页面总数。
+        # paginator.page_range 页码的范围列表，从1开始，例如[1, 2, 3, 4]。
+        # [1,2,3,4,5,6,7,8]
+        # 总页数 <= 5 显示所有页
+        # page <= 3 显示前5页
+        # page 是最后3页 显示最后5页
+        # 其他
+        if paginator.num_pages <= 5:
+            page_list = paginator.page_range
+        elif page <= 3:
+            page_list = range(1, 6)
+        elif paginator.num_pages - page <= 2:
+            page_list = range(paginator.num_pages - 4, paginator.num_pages + 1)
+        else:
+            page_list = range(page - 2, page + 3)
+
+        # 获取当前页数据
+        try:
+            page_skus = paginator.page(page)
+        except InvalidPage:
+            # 如果page_num不正确，默认给用户第一页数据
+            page_skus = paginator.page(1)
+
+        context = {
+            'sort':sort,
+            'category': category,
+            'categorys': categorys,
+            'page_skus': page_skus,
+            'new_skus': new_skus,
+            'cart_num': cart_num,
+            'page_list':page_list,
+        }
+
+        return render(request, 'list.html', context)
