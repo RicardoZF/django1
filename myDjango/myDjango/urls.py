@@ -15,6 +15,7 @@ Including another URLconf
 """
 from django.conf.urls import include, url
 from django.contrib import admin
+import haystack.urls
 
 urlpatterns = [
     url(r'^admin/', include(admin.site.urls)),
@@ -26,4 +27,7 @@ urlpatterns = [
     # url(r'^orders/', include('apps.orders.urls',namespace='orders')),
     # 富文本
     url(r'^tinymce/', include('tinymce.urls')),
+    # 搜索引擎
+    url(r'search/',include(haystack.urls)),
 ]
+
