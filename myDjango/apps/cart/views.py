@@ -1,4 +1,5 @@
 from django.http import JsonResponse, HttpResponse
+from django.shortcuts import render
 from django.views.generic import View
 from django_redis import get_redis_connection
 import json
@@ -92,3 +93,64 @@ class AddCartView(View):
             response.set_cookie('cart', cart_json)
             # 返回数据
             return response
+
+
+class CartInfoView(View):
+    """购物车详情页面"""
+    def get(self,request):
+        """
+        需要返回: sku 单个sku商品金额及数量 所有sku商品总金额和总数量
+        """
+
+        # 查询购物车数据
+        if request.user.is_authenticated():
+            # 登陆,从redis取
+            redis_conn = get_redis_connection('default')
+            user_id = request.user.id
+            cart_dict = redis_conn.hgetall('cart_%s'%user_id)
+        else:
+            # 未登陆,从cookie取
+            cart_json = request.COOKIES.get('cart')
+            if cart_json:
+                cart_dict = json.loads(cart_json)
+            else:
+                cart_dict = {}
+
+        # 保存遍历出来的sku
+        skus = []
+        # 总金额
+        total_amount = 0
+        # 总数量
+        total_count = 0
+        for sku_id,count in cart_dict.items():
+            try:
+                # 获取商品sku
+                sku = GoodsSKU.objects.get(id=sku_id)
+            except GoodsSKU.DoesNotExist:
+                # 商品不存在，跳过这个商品，继续遍历
+                continue
+
+            # redis取出的是string,所以将count转为int
+            count = int(count)
+
+            # 总金额
+            amount = sku.price * count
+
+            # 将需要展示的数据保存到对象中
+            sku.amount = amount
+            sku.count = count
+
+            # 生成模型列表
+            skus.append(sku)
+
+            # 计算总金额 总数量
+            total_amount += amount
+            total_count +=count
+
+        context = {
+            'skus':skus,
+            'total_amount':total_amount,
+            'total_count':total_count,
+        }
+
+        return render(request,'cart.html',context)
