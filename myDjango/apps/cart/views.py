@@ -97,7 +97,8 @@ class AddCartView(View):
 
 class CartInfoView(View):
     """购物车详情页面"""
-    def get(self,request):
+
+    def get(self, request):
         """
         需要返回: sku 单个sku商品金额及数量 所有sku商品总金额和总数量
         """
@@ -107,7 +108,7 @@ class CartInfoView(View):
             # 登陆,从redis取
             redis_conn = get_redis_connection('default')
             user_id = request.user.id
-            cart_dict = redis_conn.hgetall('cart_%s'%user_id)
+            cart_dict = redis_conn.hgetall('cart_%s' % user_id)
         else:
             # 未登陆,从cookie取
             cart_json = request.COOKIES.get('cart')
@@ -123,7 +124,7 @@ class CartInfoView(View):
         total_amount = 0
         # 总数量
         total_count = 0
-        for sku_id,count in cart_dict.items():
+        for sku_id, count in cart_dict.items():
             try:
                 # 获取商品sku
                 sku = GoodsSKU.objects.get(id=sku_id)
@@ -146,12 +147,132 @@ class CartInfoView(View):
 
             # 计算总金额 总数量
             total_amount += amount
-            total_count +=count
+            total_count += count
 
         context = {
-            'skus':skus,
-            'total_amount':total_amount,
-            'total_count':total_count,
+            'skus': skus,
+            'total_amount': total_amount,
+            'total_count': total_count,
         }
 
-        return render(request,'cart.html',context)
+        return render(request, 'cart.html', context)
+
+
+class UpdateCartView(View):
+    """更新购物车"""
+    """
+    幂等  传递的是最终数量
+    接收参数 sku_id,sku_count,
+    实现功能 1.校验参数 2.更新redis/cookie
+    """
+
+    def post(self, request):
+        # 获取参数 sku_id,sku_count
+        sku_id = request.POST.get('sku_id')
+        count = request.POST.get('count')
+
+        # 校验参数完整性
+        if not all([sku_id, count]):
+            return JsonResponse({'code': 1, 'message': '参数不全'})
+
+        # 判断商品是否存在
+        try:
+            sku = GoodsSKU.objects.get(id=sku_id)
+        except GoodsSKU.DoesNotExist:
+            return JsonResponse({'code': 2, 'message': '商品不存在'})
+
+        # 判断count是否为整数
+        try:
+            count = int(count)
+        except Exception:
+            return JsonResponse({'code': 3, 'message': '数量参数有误'})
+
+        # 判断库存是否足够
+        if count > sku.stock:
+            return JsonResponse({'code': 4, 'message': '库存不足'})
+
+        # 判断是否登陆
+        if request.user.is_authenticated():
+            # 登陆,改变redis数据
+            redis_conn = get_redis_connection('default')
+            user_id = request.user.id
+            # 传来的是最终数据,不需要累加
+            redis_conn.hset('cart_%s' % user_id, sku_id, count)
+
+            return JsonResponse({'code': 0, 'message': '添加购物车成功'})
+        else:
+            # 未登陆,改变cookie
+            cart_json = request.COOKIES.get('cart')
+            # 如果json字符串存在，将json字符串转成字典，因为用户可能从来没有添加过购物车
+            if cart_json is not None:
+                # 转为字典
+                cart_dict = json.loads(cart_json)
+            else:
+                cart_dict = {}
+
+            # 如果设计成幂等的，count就是最终要保存的商品的数量，不需要累加
+            cart_dict[sku_id] = count
+
+            # 转为json
+            cart_json = json.dumps(cart_dict)
+
+            # 响应结果
+            response = JsonResponse({'code': 0, 'message': '添加购物车成功'})
+
+            # 更新cookie
+            response.set_cookie('cart', cart_json)
+
+            # 返回响应
+            return response
+
+
+class DeletelCartView(View):
+    """删除购物车记录"""
+    """
+    接收参数 sku_id
+    实现功能 删除redis/cookie记录
+    """
+    def post(self, request):
+        # 获取参数 sku_id,sku_count
+        sku_id = request.POST.get('sku_id')
+
+        # 校验参数
+        if not sku_id:
+            return JsonResponse({'code': 1, 'message': '参数错误'})
+
+        # 判断是否登陆
+        if request.user.is_authenticated():
+            # 登陆,改变redis数据
+            redis_conn = get_redis_connection('default')
+            user_id = request.user.id
+            # 删除redis
+            redis_conn.hdel('cart_%s' % user_id, sku_id)
+
+        else:
+            # 未登陆,改变cookie
+            cart_json = request.COOKIES.get('cart')
+            # 如果json字符串存在，将json字符串转成字典，因为用户可能从来没有添加过购物车
+            if cart_json is not None:
+                # 转为字典
+                cart_dict = json.loads(cart_json)
+
+                if sku_id in cart_dict:
+                    # 字典删除key对应的value
+                    del cart_dict[sku_id]
+
+                # 转回json
+                cart_json = json.dumps(cart_dict)
+
+                # 响应结果
+                response = JsonResponse({'code': 0, 'message': '添加购物车成功'})
+
+                # 更新cookie
+                response.set_cookie('cart', cart_json)
+
+                # 返回响应
+                return response
+
+        # 当删除成功或者没有要删除的都提示用户成功
+        return JsonResponse({'code': 0, 'message': '删除成功'})
+
+
