@@ -1,3 +1,4 @@
+import json
 import re
 
 from django.conf import settings
@@ -131,13 +132,53 @@ class LoginView(View):
             request.session.set_expiry(0)
         else:
             request.session.set_expiry(None)
-        # 登陆成功，根据next决定访问的页面
+
+        # 在页面跳转之前，将cookie中和redis中的购物车数据合并
+        # 1.取出cookie里购物车数据
+        cart_json = request.COOKIES.get('cart')
+        if cart_json:
+            cart_dict_cookie = json.loads(cart_json)
+        else:
+            cart_dict_cookie = {}
+
+        # 2.取出redis里购物车数据
+        # 创建redis对象
+        redis_conn = get_redis_connection('default')
+        # 获取数据
+        cart_dict_redis = redis_conn.hgetall('cart_%s'%user.id)
+
+        # 3.进行购物车商品数量合并:将cookie中购物车数量合并到redis中
+        # 注意 :redis取出的 cart_dict  {b'3': b'1'} ,而 从cookie取出的是 cart_json '{"5": 2, "1": 2, "4": 1}'
+        for sku_id,count in cart_dict_cookie.items():
+            # 将cookie里取出的数据转码
+            sku_id = sku_id.encode()
+
+            # redis里有cookie里的skuid则累加数量
+            if sku_id in cart_dict_redis:
+                count += int(cart_dict_redis[sku_id])
+
+            # 没有,则直接赋值
+            cart_dict_redis[sku_id] = count
+
+        # 4.将合并后的redis数据，设置到redis中:redis_conn.hmset()不能传入空字典
+        if cart_dict_redis:
+            # hmset不能存空
+            # hmset 一次存多条数据 类似命令行 cart_user.id skuid1 5 skuid2 6
+            redis_conn.hmset('cart_%s' % user.id, cart_dict_redis)
+
+        # 根据next决定访问的页面
         next = request.GET.get('next')
         if next is None:
-            return redirect(reverse('goods:index'))
+            # 跳转到首页
+            response = redirect(reverse('goods:index'))
         else:
-            return redirect(next)
+            # 从哪来，回哪去
+           response = redirect(next)
 
+        # 清除cookie
+        response.delete_cookie('cart')
+
+        return response
 
 class LogoutView(View):
     """登出"""

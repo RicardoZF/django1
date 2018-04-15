@@ -111,6 +111,7 @@ class CartInfoView(View):
         else:
             # 未登陆,从cookie取
             cart_json = request.COOKIES.get('cart')
+
             if cart_json:
                 cart_dict = json.loads(cart_json)
             else:
