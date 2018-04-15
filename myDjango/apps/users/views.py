@@ -134,7 +134,7 @@ class LoginView(View):
         # 登陆成功，根据next决定访问的页面
         next = request.GET.get('next')
         if next is None:
-            return HttpResponse('去主页')
+            return redirect(reverse('goods:index'))
         else:
             return redirect(next)
 

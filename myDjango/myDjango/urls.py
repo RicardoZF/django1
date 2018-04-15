@@ -23,8 +23,8 @@ urlpatterns = [
     url(r'^users/', include('apps.users.urls',namespace='users')),
     # 商品模块
     url(r'^goods/', include('apps.goods.urls',namespace='goods')),
-    # 订单模块
-    # url(r'^orders/', include('apps.orders.urls',namespace='orders')),
+    # 购物车模块
+    url(r'^cart/', include('apps.cart.urls',namespace='cart')),
     # 富文本
     url(r'^tinymce/', include('tinymce.urls')),
     # 搜索引擎

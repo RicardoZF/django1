@@ -4,8 +4,35 @@ from django.core.urlresolvers import reverse
 from django.shortcuts import render, redirect
 from django.views.generic import View
 from django_redis import get_redis_connection
-
+import json
 from goods.models import GoodsCategory, IndexGoodsBanner, IndexPromotionBanner, IndexCategoryGoodsBanner, GoodsSKU
+
+class BaseCartView(View):
+    """提供购物车数据统计功能"""
+    def get_cart_num(self, request):
+
+        cart_num = 0
+        if request.user.is_authenticated():
+            # 登陆,从redis获取
+            # 获取用户id
+            user_id = request.user.id
+            # 创建redis连接对象
+            redis_conn = get_redis_connection('default')
+            # 从redis中获取购物车数据，返回字典,如果没有数据，返回None,所以不需要异常判断
+            cart_dict = redis_conn.hgetall('cart_%s'%user_id)
+        else:
+            # 未登录,从cookie获取
+            cart_json = request.COOKIES.get('cart')
+            if cart_json:
+                # 将json数据转为字典
+                cart_dict = json.loads(cart_json)
+            else:
+                cart_dict = {}
+        # 遍历购物车字典，计算商品数量
+        for val in cart_dict.values():
+            cart_num += int(val)
+
+        return cart_num
 
 
 class IndexView(View):
@@ -16,52 +43,38 @@ class IndexView(View):
 
         # 从缓存中取数据,有数据直接返回
         context = cache.get('index_page_data')
-        if context:
-            return render(request, 'index.html', context)
+        if context is None:
 
-        # 用户个人信息(request.user)
-        # 商品分类信息
-        categorys = GoodsCategory.objects.all()
+            # 用户个人信息(request.user)
+            # 商品分类信息
+            categorys = GoodsCategory.objects.all()
 
-        # 轮播图,按照index进行排序
-        banners = IndexGoodsBanner.objects.all().order_by('index')
+            # 轮播图,按照index进行排序
+            banners = IndexGoodsBanner.objects.all().order_by('index')
 
-        # 分类商品详情
-        for category in categorys:
-            title_banners = IndexCategoryGoodsBanner.objects.filter(category=category, display_type=0).order_by('index')
-            category.title_banners = title_banners
+            # 分类商品详情
+            for category in categorys:
+                title_banners = IndexCategoryGoodsBanner.objects.filter(category=category, display_type=0).order_by('index')
+                category.title_banners = title_banners
 
-            image_banners = IndexCategoryGoodsBanner.objects.filter(category=category, display_type=1).order_by('index')
-            category.image_banners = image_banners
+                image_banners = IndexCategoryGoodsBanner.objects.filter(category=category, display_type=1).order_by('index')
+                category.image_banners = image_banners
 
-        # 活动
-        promotion_banners = IndexPromotionBanner.objects.all()
+            # 活动
+            promotion_banners = IndexPromotionBanner.objects.all()
 
-        context = {
-            'categorys': categorys,
-            'banners': banners,
-            'promotion_banners': promotion_banners,
-        }
+            context = {
+                'categorys': categorys,
+                'banners': banners,
+                'promotion_banners': promotion_banners,
+            }
 
-        # 设置缓存数据：名字，内容，有效期
-        cache.set('index_page_data', context, 3600)
+            # 设置缓存数据：名字，内容，有效期
+            cache.set('index_page_data', context, 3600)
+        else:
+            print('使用的缓存的数据')
 
-        # 购物车,经常变化,不能存在缓存里
-        cart_num = 0
-
-        # 如果用户登陆,获取购物车数据
-        # 哈希类型存储：cart_userid sku_1 10 sku_2 20
-        # 字典结构：cart_userid:{sku_1:10,sku_2:20}
-        if request.user.is_authenticated():
-            # 创建redis对象
-            redis_conn = get_redis_connection()
-            # 获取用户id
-            user_id = request.user.id
-            # 从redis中获取购物车数据，返回字典
-            cart_dict = redis_conn.hget('cart_%s' % user_id)
-            # 遍历购物车字典,累加到购物车
-            for value in cart_dict.values():
-                cart_num += int(value)
+        cart_num = BaseCartView().get_cart_num(request)
 
         # 补充购物车数据
         context.update(cart_num=cart_num)
@@ -80,58 +93,53 @@ class DetailView(View):
         """
         # 尝试从缓存获取
         context = cache.get("detail_%s" % sku_id)
-        if context:
-            # 有数据就直接返回
-            return render(request, 'detail.html', context)
-        try:
-            sku = GoodsSKU.objects.get(id=sku_id)
-        except GoodsSKU.DoesNotExist:
-            return redirect(reverse('goods:index'))
+        if context is None:
 
-        # 商品分类
-        categorys = GoodsCategory.objects.all()
+            try:
+                sku = GoodsSKU.objects.get(id=sku_id)
+            except GoodsSKU.DoesNotExist:
+                return redirect(reverse('goods:index'))
 
-        # 同名其他规格商品
-        other_skus = sku.goods.goodssku_set.exclude(id=sku_id)
+            # 商品分类
+            categorys = GoodsCategory.objects.all()
 
-        # 先判断该商品是否有订单
-        # 有则获取最新的30条评论信息
-        sku_orders = sku.ordergoods_set.all().order_by('-create_time')[:30]
-        if sku_orders:
-            for sku_order in sku_orders:
-                sku_order.ctime = sku_order.create_time.strftime('%Y-%m-%d %H:%M:%S')
-                # 订单所属的用户名
-                sku_order.username = sku_order.order.user.username
-        else:
-            sku_orders = []
+            # 同名其他规格商品
+            other_skus = sku.goods.goodssku_set.exclude(id=sku_id)
 
-        # 新品推荐
-        new_skus = GoodsSKU.objects.filter(category=sku.category).order_by('-create_time')[:2]
+            # 先判断该商品是否有订单
+            # 有则获取最新的30条评论信息
+            sku_orders = sku.ordergoods_set.all().order_by('-create_time')[:30]
+            if sku_orders:
+                for sku_order in sku_orders:
+                    sku_order.ctime = sku_order.create_time.strftime('%Y-%m-%d %H:%M:%S')
+                    # 订单所属的用户名
+                    sku_order.username = sku_order.order.user.username
+            else:
+                sku_orders = []
 
-        # 设置缓存
-        context = {
-            "categorys": categorys,
-            "sku": sku,
-            "orders": sku_orders,
-            "new_skus": new_skus,
-            "other_skus": other_skus
-        }
+            # 新品推荐
+            new_skus = GoodsSKU.objects.filter(category=sku.category).order_by('-create_time')[:2]
 
-        cache.set("detail_%s" % sku_id, context)
+            # 设置缓存
+            context = {
+                "categorys": categorys,
+                "sku": sku,
+                "orders": sku_orders,
+                "new_skus": new_skus,
+                "other_skus": other_skus
+            }
+
+            cache.set("detail_%s" % sku_id, context)
 
         # 购物车数量
-        cart_num = 0
+        cart_num = BaseCartView().get_cart_num(request)
+
         # 如果是登录的用户
         if request.user.is_authenticated():
             # 获取用户id
             user_id = request.user.id
-            # 从redis中获取购物车信息
-            redis_conn = get_redis_connection("default")
-            # 如果redis中不存在，会返回None
-            cart_dict = redis_conn.hgetall("cart_%s" % user_id)
-            for val in cart_dict.values():
-                cart_num += int(val)
-
+            # 创建redis连接对象
+            redis_conn = get_redis_connection('default')
             # 浏览记录: lpush history_userid sku_1 sku_2  (redis中以list形式存储)
             # 移除已经存在的本商品浏览记录
             # count > 0: 从头往尾移除
@@ -174,17 +182,7 @@ class ListView(View):
         categorys = GoodsCategory.objects.all()
 
         # 购物车数量
-        cart_num = 0
-        # 如果是登录的用户
-        if request.user.is_authenticated():
-            # 获取用户id
-            user_id = request.user.id
-            # 从redis中获取购物车信息
-            redis_conn = get_redis_connection("default")
-            # 如果redis中不存在，会返回None
-            cart_dict = redis_conn.hgetall("cart_%s" % user_id)
-            for val in cart_dict.values():
-                cart_num += int(val)
+        cart_num = BaseCartView().get_cart_num(request)
 
         # 新品推荐
         new_skus = GoodsSKU.objects.filter(category=category).order_by('-create_time')[:2]
